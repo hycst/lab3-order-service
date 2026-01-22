@@ -68,35 +68,33 @@ The app uses a microservices architecture. This means that different parts of th
 Here's the high-level process you'll follow:
 
 ```mermaid
-flowchart TD
-    A[1. Create Azure VM - Ubuntu] --> B[2. Configure Network Security Group - Open Ports]
-    B --> C[3. Connect via VS Code Remote-SSH]
-    C --> D[4. Clone Repository]
-    D --> E[5. Install Services in Order]
+flowchart LR
+    subgraph Azure[" ☁️ Azure Setup"]
+        A[Create VM] --> B[Configure NSG]
+    end
+    subgraph Dev[" 💻 Development"]
+        C[VS Code SSH] --> D[Clone Repo]
+    end
+    subgraph Services[" 🔧 Install Services"]
+        E[RabbitMQ] --> F[Product] --> G[Order] --> H[Store Front]
+    end
+    subgraph Submit[" 📝 Submission"]
+        I[Test App] --> J[Record Demo] --> K[Submit]
+    end
 
-    E --> E1[a. RabbitMQ - message broker]
-    E1 --> E2[b. Product Service - Rust]
-    E2 --> E3[c. Order Service - Node.js]
-    E3 --> E4[d. Store Front - Vue.js]
-
-    E4 --> F[6. Test Application in Browser]
-    F --> G[7. Record Demo Video]
-    G --> H[8. Write Technical Explanations]
-    H --> I[9. Submit to Brightspace]
+    Azure --> Dev --> Services --> Submit
 
     style A fill:#4A90D9,stroke:#2E5A8B,color:#fff
     style B fill:#4A90D9,stroke:#2E5A8B,color:#fff
-    style C fill:#4A90D9,stroke:#2E5A8B,color:#fff
-    style D fill:#4A90D9,stroke:#2E5A8B,color:#fff
-    style E fill:#5BA85B,stroke:#3D7A3D,color:#fff
-    style E1 fill:#7BC47B,stroke:#5BA85B,color:#000
-    style E2 fill:#7BC47B,stroke:#5BA85B,color:#000
-    style E3 fill:#7BC47B,stroke:#5BA85B,color:#000
-    style E4 fill:#7BC47B,stroke:#5BA85B,color:#000
-    style F fill:#E8A838,stroke:#B8831C,color:#000
-    style G fill:#E8A838,stroke:#B8831C,color:#000
-    style H fill:#E8A838,stroke:#B8831C,color:#000
-    style I fill:#D95B5B,stroke:#A83D3D,color:#fff
+    style C fill:#5BA85B,stroke:#3D7A3D,color:#fff
+    style D fill:#5BA85B,stroke:#3D7A3D,color:#fff
+    style E fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style F fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style G fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style H fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style I fill:#E8A838,stroke:#B8831C,color:#000
+    style J fill:#E8A838,stroke:#B8831C,color:#000
+    style K fill:#D95B5B,stroke:#A83D3D,color:#fff
 ```
 
 ---
