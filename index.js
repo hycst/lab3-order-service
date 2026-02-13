@@ -1,63 +1,90 @@
-// Import required modules
-const express = require('express');  // Express is a minimal Node.js framework for building web applications.
-const amqp = require('amqplib/callback_api');  // AMQP (Advanced Message Queuing Protocol) client library for communicating with RabbitMQ.
-const cors = require('cors');  // CORS (Cross-Origin Resource Sharing) middleware for handling cross-origin requests.
+// index.js
+const express = require("express");
+const amqp = require("amqplib");     // NOTE: uses promise-based amqplib
+const cors = require("cors");
 
-const app = express();  // Create an Express application instance.
-app.use(express.json());  // Middleware to parse incoming JSON request bodies.
-
-// Enable CORS (Cross-Origin Resource Sharing) for all routes
-// This allows your API to accept requests from different origins (e.g., your frontend).
+const app = express();
 app.use(cors());
+app.use(express.json());
 
-// URL for connecting to RabbitMQ (localhost means it's running locally).
-const RABBITMQ_URL = 'amqp://localhost';
+// ===== Azure/App settings =====
+const PORT = process.env.PORT || 3000;
 
-// Define a POST route for creating orders
-// This route is accessed when a client (e.g., frontend) sends an order.
-app.post('/orders', (req, res) => {
-  const order = req.body;  // Extract the order data from the request body.
-  
-  // Connect to RabbitMQ server
-  amqp.connect(RABBITMQ_URL, (err, conn) => {
-    if (err) {
-      // If an error occurs while connecting to RabbitMQ, send a 500 status and error message.
-      return res.status(500).send('Error connecting to RabbitMQ');
-    }
+// IMPORTANT: In Azure Web App, set this in Configuration > Application settings
+// Example: amqp://newuser:newpassword@20.163.62.61:5672/
+const RABBITMQ_URL = process.env.RABBITMQ_URL;
 
-    // Once connected to RabbitMQ, create a channel to communicate with it.
-    conn.createChannel((err, channel) => {
-      if (err) {
-        // If an error occurs while creating a channel, send a 500 status and error message.
-        return res.status(500).send('Error creating channel');
-      }
+// Queue name can also be env-based
+const QUEUE_NAME = process.env.QUEUE_NAME || "order_queue";
 
-      const queue = 'order_queue';  // Define the queue where the order will be sent.
-      const msg = JSON.stringify(order);  // Convert the order object to a JSON string.
+// ===== RabbitMQ connection reuse (don’t reconnect per request) =====
+let connection = null;
+let channel = null;
 
-      // Assert (create) the queue if it doesn't already exist.
-      // durable: false means the queue doesn't persist after RabbitMQ restarts.
-      channel.assertQueue(queue, { durable: false });
+async function getChannel() {
+  if (channel) return channel;
 
-      // Send the order message to the queue.
-      channel.sendToQueue(queue, Buffer.from(msg));
+  if (!RABBITMQ_URL) {
+    throw new Error("RABBITMQ_URL is not set (Azure: Configuration > Application settings).");
+  }
 
-      // Log the sent order to the console.
-      console.log("Sent order to queue:", msg);
+  connection = await amqp.connect(RABBITMQ_URL);
+  channel = await connection.createChannel();
+  await channel.assertQueue(QUEUE_NAME, { durable: false });
 
-      // Send a response to the client confirming that the order was received.
-      res.send('Order received');
-    });
+  connection.on("error", () => {
+    channel = null;
+    connection = null;
+  });
+
+  connection.on("close", () => {
+    channel = null;
+    connection = null;
+  });
+
+  return channel;
+}
+
+// ===== Routes =====
+app.get("/", (req, res) => res.status(200).send("OK"));
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+
+// Basic debug page (safe-ish: masks password)
+app.get("/debug", (req, res) => {
+  const masked =
+    RABBITMQ_URL ? RABBITMQ_URL.replace(/\/\/([^:]+):([^@]+)@/, "//$1:***@") : null;
+
+  res.json({
+    port: PORT,
+    queue: QUEUE_NAME,
+    rabbitmq_url_set: Boolean(RABBITMQ_URL),
+    rabbitmq_url_masked: masked,
   });
 });
 
-// Set the port where the Express server will listen for incoming requests.
-// In this case, it's running on port 3000.
+app.post("/orders", async (req, res) => {
+  try {
+    const order = req.body;
+    if (!order || Object.keys(order).length === 0) {
+      return res.status(400).json({ error: "Missing JSON body" });
+    }
 
+    const ch = await getChannel();
+    const msg = JSON.stringify(order);
 
-app.get("/", (req, res) => res.send("OK"));
+    ch.sendToQueue(QUEUE_NAME, Buffer.from(msg));
+    console.log("Sent order to queue:", msg);
 
-const PORT = process.env.PORT || 3000;
+    return res.status(200).json({ message: "Order received", queued: true });
+  } catch (err) {
+    console.error("Order error:", err?.message || err);
+    return res.status(500).json({
+      error: "Error connecting to RabbitMQ",
+      detail: err?.message || String(err),
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Order service listening on port ${PORT}`);
 });
