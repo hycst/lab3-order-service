@@ -53,7 +53,11 @@ app.post('/orders', (req, res) => {
 
 // Set the port where the Express server will listen for incoming requests.
 // In this case, it's running on port 3000.
-const PORT = 3000;
+
+
+app.get("/", (req, res) => res.send("OK"));
+
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Order service is running on http://localhost:${PORT}`);
+  console.log(`Order service listening on port ${PORT}`);
 });
